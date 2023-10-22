@@ -1,3 +1,5 @@
+// TODO: The program does not work properly, fix the access violation error at ZwSetEaFile...
+
 // Extended attributes are a very old compatibility feature of the NTFS file system
 // NTFS allows the user to create one or more extended attributes associated to a file.
 // There are no command line tools that can be used to query the extended attributes on a file.
@@ -65,8 +67,10 @@ BOOL write_ea(
 	USHORT value_size) {
 
 	// Allocate buffer for FILE_FULL_EA_INFORMATION
-	LPVOID buffer = malloc(sizeof(FILE_FULL_EA_INFORMATION) + attribute_name_size + value_size);
-	if (buffer == NULL) {
+	size_t buf_size = sizeof(FILE_FULL_EA_INFORMATION) + attribute_name_size + value_size;
+	LPVOID buffer = malloc(buf_size);
+	
+	if (buffer == NULL || memset(buffer, 0, buf_size) == NULL) {
 		printf("[!] Error allocating buffer\n");
 		return FALSE;
 	}
@@ -78,8 +82,8 @@ BOOL write_ea(
 	ea_info->Flags = 0;
 	ea_info->EaNameLength = attribute_name_size;
 	ea_info->EaValueLength = value_size;
-	strcpy_s(ea_info->EaName, ea_info->EaNameLength + 1, attribute_name);
-	memcpy(ea_info->EaName + ea_info->EaNameLength + 1, value, ea_info->EaValueLength);
+	memcpy(ea_info->EaName, attribute_name, attribute_name_size);
+	memcpy(ea_info->EaName + attribute_name_size, value, value_size);
 
 	// Write the extended attributes
 	if (ZwSetEaFile(
@@ -116,12 +120,41 @@ BOOL read_ea(HANDLE target_file, PVOID buffer, ULONG buffer_size) {
 	return TRUE;
 }
 
+// Gets the buffer containing the FILE_FULL_EA_INFORMATION structures and parses each entry
 void parse_and_print_ea(PVOID buffer, size_t buffer_size) {
+	PFILE_FULL_EA_INFORMATION ea_info_struct = (PFILE_FULL_EA_INFORMATION) buffer;
+	char ea_name[256] = { 0 }; // No need for malloc on 256 bytes
+	ULONG next_entry_offset = 0;
+	do {
+		next_entry_offset = ea_info_struct->NextEntryOffset;
+		printf("NextEntryOffset: %lu\n", ea_info_struct->NextEntryOffset);
+		printf("EaNameLength: %x\n", ea_info_struct->EaNameLength);
 
+		memset(ea_name, 0, 256); // Reset name to all zeroes
+		memcpy(ea_name, ea_info_struct->EaName, ea_info_struct->EaNameLength);
+		printf("EaName: %s\n", ea_name);
+
+		printf("EaValueLength: %u\n", ea_info_struct->EaValueLength);
+		
+		int i = 0;
+		for (int i = 0; i <= sizeof(FILE_FULL_EA_INFORMATION) + ea_info_struct->EaNameLength + ea_info_struct->EaValueLength; i++) {
+			printf("%02hhx ", *((char*)buffer + i));
+		}
+
+		printf("\n");
+
+		ea_info_struct += ea_info_struct->NextEntryOffset;
+
+		// Check buffer overrun
+		if ((char*)ea_info_struct + ea_info_struct->NextEntryOffset > (char*)buffer + buffer_size) {
+			break;
+		}
+	} while (next_entry_offset != 0);
 }
 
 int main(int argc, char* argv[])
 {
+
 	if (argc < 2) {
 		printf("%s <target_file>\n", argv[0]);
 		return -1;
@@ -133,7 +166,7 @@ int main(int argc, char* argv[])
 
 	char ea_name[] = "hidden";
 	char ea_value[] = "This is a secret";
-	size_t ea_value_size = strlen(ea_value);
+
 
 	// Open target file
 	HANDLE hfile = CreateFileA(
@@ -149,6 +182,11 @@ int main(int argc, char* argv[])
 		printf("[!] Error opening the target file.\n");
 		return -1;
 	}
+	
+	if (!write_ea(hfile, ea_name, strlen(ea_name), ea_value, strlen(ea_value) )) {
+		printf("[!] Error writing extended attributes.\n");
+	}
+	
 
 	ULONG output_buf_size = 0x2000;
 	PVOID output_buf = malloc(output_buf_size);
