@@ -32,6 +32,7 @@ int find_process(const wchar_t* process_name) {
 			break; // Comment the break to find multiple instances
 		}
 	}
+	return 0;
 }
 
 
