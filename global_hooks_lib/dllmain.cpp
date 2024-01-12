@@ -16,7 +16,6 @@ void debug_out(const char* fmt, ...) {
     vsprintf_s(dbg_output, fmt, argp);
     va_end(argp);
     OutputDebugStringA((LPCSTR)dbg_output);
-
 }
 
 // Execute when the DLL is attached to the target

