@@ -29,10 +29,10 @@ static DWORD rva_to_offset(DWORD rva, UINT_PTR base_address)
 
 int main() {
     // Target file
-    LPCSTR file_path = "C:\\Windows\\System32\\cmd.exe";
+    LPCSTR file_path = "C:\\Windows\\System32\\ntdll.dll";
 
     HANDLE file_handle;
-    DWORD file_size, bytes_read, import_directory_rva;
+    DWORD file_size, bytes_read, import_directory_rva, export_directory_rva;
     PIMAGE_THUNK_DATA thunk = { 0 };
     LPVOID file_buffer;
     PIMAGE_DOS_HEADER dos_header = { 0 };
@@ -164,15 +164,15 @@ int main() {
         section_header++;
     }
 
-    // Parse DLL Imports
-    printf("\n========= DLL IMPORTS =========\n");
+    // Parse imports
+    printf("\n========= IMPORTS =========\n");
 
     import_directory_rva = nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
     image_import_descriptor = (PIMAGE_IMPORT_DESCRIPTOR)((UINT_PTR)file_buffer +
         rva_to_offset(import_directory_rva, (UINT_PTR)file_buffer));
 
     while (image_import_descriptor->OriginalFirstThunk != 0) {
-        printf("\n========= DLL =========\n");
+        printf("\n\n");
         if (image_import_descriptor->Name != 0) {
             printf("%-38s %s\n", "DLL name",
                 (BYTE*)(rva_to_offset(image_import_descriptor->Name, (UINT_PTR)file_buffer))
@@ -206,6 +206,41 @@ int main() {
         }
 
         image_import_descriptor++;
+    }
+
+    // Parse exports
+    printf("\n========= EXPORT TABLE =========\n");
+
+    export_directory_rva = nt_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (export_directory_rva != 0) {
+        PIMAGE_EXPORT_DIRECTORY export_directory = (PIMAGE_EXPORT_DIRECTORY)((UINT_PTR)file_buffer +
+            rva_to_offset(export_directory_rva, (UINT_PTR)file_buffer));
+
+        printf("%-38s 0x%X\n", "Characteristics", export_directory->Characteristics);
+        printf("%-38s 0x%X\n", "TimeDateStamp", export_directory->TimeDateStamp);
+        printf("%-38s 0x%X\n", "MajorVersion", export_directory->MajorVersion);
+        printf("%-38s 0x%X\n", "MinorVersion", export_directory->MinorVersion);
+        printf("%-38s %s\n", "Name", (BYTE*)(rva_to_offset(export_directory->Name, (UINT_PTR)file_buffer)) + (UINT_PTR)file_buffer);
+        printf("%-38s 0x%X\n", "Base", export_directory->Base);
+        printf("%-38s 0x%X\n", "NumberOfFunctions", export_directory->NumberOfFunctions);
+        printf("%-38s 0x%X\n", "NumberOfNames", export_directory->NumberOfNames);
+        printf("%-38s 0x%X\n", "AddressOfFunctions", export_directory->AddressOfFunctions);
+        printf("%-38s 0x%X\n", "AddressOfNames", export_directory->AddressOfNames);
+        printf("%-38s 0x%X\n", "AddressOfNameOrdinals", export_directory->AddressOfNameOrdinals);
+
+        DWORD* functions = (DWORD*)((UINT_PTR)file_buffer + rva_to_offset(export_directory->AddressOfFunctions, (UINT_PTR)file_buffer));
+        DWORD* names = (DWORD*)((UINT_PTR)file_buffer + rva_to_offset(export_directory->AddressOfNames, (UINT_PTR)file_buffer));
+        WORD* ordinals = (WORD*)((UINT_PTR)file_buffer + rva_to_offset(export_directory->AddressOfNameOrdinals, (UINT_PTR)file_buffer));
+
+        printf("Exported functions:\n");
+        for (DWORD i = 0; i < export_directory->NumberOfNames; i++) {
+            printf("\n\t%-38s %s\n", "Name", (BYTE*)(rva_to_offset(names[i], (UINT_PTR)file_buffer)) + (UINT_PTR)file_buffer);
+            printf("\t%-38s 0x%X\n", "Ordinal", ordinals[i]);
+            printf("\t%-38s 0x%X\n", "Function Address", functions[ordinals[i]]);
+        }
+    }
+    else {
+        printf("No export table found.\n");
     }
 
     CloseHandle(file_handle);
